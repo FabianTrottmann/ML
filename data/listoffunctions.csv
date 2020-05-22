@@ -1,0 +1,84 @@
+﻿function name,purpose,example
+data.frame(),storing data tables -> list of vectors of eq length,"v.participant.name <- c (""Max"", ""Tony"") \n
+v.age <- c(17, 23, 45) \n
+v.minor.YES <- c(TRUE, FALSE, FALSE) \n
+d.test <- data.frame(v.participant.name, v.age, v.minor.YES)"
+list(...),dealing with vectors of differing length,"l.1 <- list(A = ""a"",
+num.vec = 10:5,
+Mat_1)"
+"plot(x, y, ...)",plotting R object (simple scatter plots),"plot(y = Puromycin$rate,
+     x = Puromycin$conc,
+     pch = ""x"", #use random dots e.g. o or c or x
+     col = ""red"",
+     cex = 2,
+     main = ""Reaction rates vs. Conc"",
+     xlab = ""substrate conc [ppm]"",
+     ylab = ""reaction rates [counts/min]"")"
+,,"plot(y = c(0,1.8,2,2.7,5,3.7,4,3.9,4.1,4.4),
+     x = 1:10,
+     pch = 1:10, #all different kind of forms for data points
+     col = 1:10) #all different kind of colors for data points"
+"par(..., no.readonly = FALSE)",control functions,"par(mfrow=c(1,2), 
+    pch=17) # two graphs in one device, and all graphs with triangles"
+"jpeg(""MyPlotsFor_Bootcamp.jpeg"") \n
+plot(x, y, ...)",export plot as jpeg ,"jpeg(""MyPlotsFor_Bootcamp.jpeg"")
+plot(Examination ~ Fertility, data = swiss)
+dev.off() #close the graph -> remove the current plot"
+"plot(x,y,…) \n
+identify(x, ...)","with identify you get an interactive plot, where we can identifyobserved data points. click with cursor in plot and click finish. Then you get the exact observation","plot(swiss$Agriculture ~ swiss$Fertility, data =swiss)
+identify(y=swiss$Agriculture, x = swiss$Fertility)"
+"boxplot(x, ...)",Produce box-and-whisker plot(s) of the given grouped values,"boxplot(y = Loblolly$height, x = Loblolly$Seed)"
+,,"boxplot(height ~ Seed, data = Loblolly)"
+"library(lattice)
+xyplot(x, data, ...)",produce bivariate scatterplots or time-series plots,"xyplot(height ~ age, groups = Seed, data = Loblolly, type = ""b"") #grouping"
+"library(lattice)
+dotplot(x, data, ...)",produce cleveland dot plots,
+"library(lattice)
+barchart(x, data, …)",produce bar plots,
+"library(lattice)
+stripplot(x, data, …)",produce one-dimensional scatterplots,
+"library(lattice)
+bwplot(x, data, …)",produces box-and-whisker plots,
+,,
+"library(ggplot2)
+qplot(x, y, data,…)",is a shortcut to be familiar if using plot() and is great to produce plots quickly but it is highly recommended using ggplot() for more complex graphics,"qplot(y=height, x=age, data=Loblolly, facest = ~ Seed)"
+"library(ggplot2)
+ggplot2(x, data, …)",advanced plotting: create elegant data visualisations using the grammar of graphics,"ggplot(data = Loblolly, mapping = aes(y=height, x = age)) + geom_point() # base call ggplot"
+,,"ggplot(data = Loblolly, mapping = aes(y=height, x = age)) + geom_point() + facet_wrap(. ~ Seed) #panelling (for each combination we have a panel)"
+,,"ggplot(data = Loblolly, mapping = aes(y=height, x = age, colour = Seed)) + geom_point() #grouping (colouring) with data points"
+,,"ggplot(data = Loblolly, mapping = aes(y=height, x = age, colour = Seed)) + geom_line() #grouping (colouring) with lines"
+,,"ggplot(data = Loblolly, mapping = aes(y=height, x = age)) + geom_point() + geom_smooth() #adding summary statistics"
+sessionInfo(),information about local system and default R packages that are loaded,
+"find(""lm"") \n
+?lm",looking for a package and use the help function to get some information how to use it,
+"install.packages(pkgs)
+library(pkgs)",installing and loading packages,"install.packages(""Rtools"")
+install.packages(""boot"")
+library(""boot"") # always load on the beginning of code"
+?gam,getting help about a function,
+"help(package=""gam"")",getting help about a package,
+.libPaths(),refers to add-on packages path,
+"find(""boxplot"")",finding a function,
+apropos(pkgs),finding a package,"apropos(""packages"") #finding all packages with this string 'packages'"
+::,use a function of an explicit package,"gam.1 <- mgcv::gam(Sepal.Width ~ s(Petal.Width), data = iris)
+#use function of package mgcv explicitly"
+"library(magrittr)
+%>%","maggrittr pipes operators are used to pipe a value forward into an expression or function call.
+It is used to decrease development time and to improve readability and maintainability of code","iris %$%  #access the whole dataset
+  mean(Sepal.Length) %>%
+  round(digits = 2)"
+,,iris$Sepal.Length %>% mean %>% round(digits = 2)
+anyNA(x),TRUE if any NA values are detected in x which is a vector. Otherwise FALSE.,
+is.na(x),The generic function is.na indicates which elements are missing.,"is.na(c(1, NA)) #> FALSE  TRUE"
+"na.fail(object, ...)","returns the object if it does not contain any missing values, and signals an error otherwise",
+"na.omit(object, ...)",returns the object with incomplete cases removed,
+"which(x, arr.ind = FALSE, useNames = TRUE)",,which(is.na(airquality$Ozone)) #returns all indices where function is.na evaluates to TRUE
+"apply(X, MARGIN, FUN, ...)",returns a vector or array with applied function given as parameter,"apply(airquality, MARGIN = 1, FUN = anyNA)  #check in any rows if there is any NA"
+,,"apply(airquality, MARGIN = 2, FUN = anyNA)  #check in any column if there is any NA"
+"library(dplyr)
+filter()",,"airquality %>%
+  filter(Ozone >= 80) %>%
+  select(Ozone, contains(""Temp"")) %>%
+  arrange(desc(Ozone), Temp)"
+"library(dplyr)
+select()",,

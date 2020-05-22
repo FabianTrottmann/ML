@@ -1,0 +1,45 @@
+---
+title: "R Bootcamp"
+subtitle: "list of functions"
+author: "Luca Hüsler, Fabian Trottmann"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+    html_document:
+    theme: flatly
+    highlight: pygments
+    toc: true
+    toc_float: true
+    df_print: paged
+    number_sections: true
+# knit documents to output folder
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../output") })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+usePackage <- function(p) 
+{
+  if (!is.element(p, installed.packages()[,1]))
+    install.packages(p, dep = TRUE, repos = "http://cran.us.r-project.org")
+  require(p, character.only = TRUE)
+}
+```
+
+# List of functions
+The following table lists all functions seen during the course of R Bootcamp.
+
+```{r, echo=FALSE}
+library(DT)
+
+df.function <- read.csv("../data/listoffunctions.csv", header = T)
+
+
+datatable(df.function, options = list(
+  autoWidth = TRUE,
+  pageLength = 100,
+  columnDefs = list(list(width = '400px', targets = c(3)))), colnames = c("function name", "purpose", "example"))
+
+```
+

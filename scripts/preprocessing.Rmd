@@ -1,0 +1,132 @@
+---
+title: "Spotify analysis: Track duration of german rap music"
+subtitle: "Part 1: Preprocessing"
+author: "Luca Hüsler, Fabian Trottmann"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: flatly
+    highlight: pygments
+    toc: true
+    toc_float: true
+    df_print: paged
+    number_sections: true
+# knit documents to output folder
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../output") })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, cache = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library(tidyverse)
+```
+
+
+# Load data
+
+We first load the data that we extracted from the Spotify API via the *loadData.R* script.
+
+```{r}
+df.german_rap_features <- read_rds("../data/audio_features_by_german_hiphop_2020-02-21.rds")
+df.german_rap_artists <- read_rds("../data/german_rap_artists_2020-02-21.rds")
+```
+
+# Inpsect the data
+We do some basic checks to see if the import went well.
+```{r}
+dim(df.german_rap_features)
+dim(df.german_rap_artists)
+```
+
+We obtain 7230 rows (tracks) with 40 variables. The artist data contains 50 rows with 12 variables.
+
+Let's have a look at the first rows:
+```{r}
+head(df.german_rap_features)
+```
+Looks good. 
+
+# Data cleaning
+## Filterting & Cleaning
+To clean the data, we rely upon **[tidyverse](https://www.tidyverse.org/)**, a collection of R packages designed for data science. We use piping to clean the data and transform it to the desired shape for the analysis. The pipe consists of the following steps:
+
+- join potentially interesting variables of the artist data (popularity & number of followers) 
+- select columns of interest for the analysis
+- select distinct `track_name`'s (as features appear multiple times, for each artist)
+- create a new column: `duration_min`
+- filter out `track_name`'s that contain "intro", "outro", "skit" or "instrumental", as those records should not be considered for the analysis
+- filter on `duration_min`: only tracks with a duration between 1 and 10 minutes will be considered (decision made by the authors to remove outliers)
+- filter on `album_release_year`: only tracks released between 2015 and 2019 will be considered
+
+
+```{r}
+df.german_rap_features_clean <- df.german_rap_features %>%
+  left_join(df.german_rap_artists, by = c("artist_id" = "id")) %>%
+  select(track_id, track_name, track_popularity, artist_id, artist_name, duration_ms, album_release_date,
+         danceability, energy, loudness, key, mode, speechiness, acousticness, liveness, instrumentalness, liveness,
+         tempo, valence, explicit, key_name, mode_name, key_mode,
+         album_release_year, album_type, album_name, key_mode, key_name, followers.total) %>%
+  dplyr::distinct(track_id, .keep_all = TRUE) %>%
+  dplyr::distinct(track_name, artist_name, .keep_all = TRUE) %>%
+  filter(!str_detect(track_name, 
+                     "Intro|Outro|Commentary|Skit|Instrumental")) %>%
+  dplyr::mutate(duration_min = duration_ms/60000) %>%
+  filter(duration_min > 1.00, duration_min < 10.00) %>%
+  filter(album_release_year > 2014, album_release_year < 2020)
+
+```
+
+
+Let's check the data after preprocessing and cleaning.
+```{r}
+dim(df.german_rap_features_clean)
+```
+
+## Type conversions
+As a next step, we check for the data types of the remaining variables and see if we have to do some type conversions for the analysis.
+```{r}
+str(df.german_rap_features_clean)
+```
+
+We should do some type conversions to make the variables suitable for analysis:
+
+- change strings to factors for `key_name`, `mode_name`, `key_mode` and `album_type`
+- change string to date from `album_release_year` (in case we consider that in the model)
+
+```{r}
+df.german_rap_features_clean <- df.german_rap_features_clean %>%
+  mutate(album_release_date = lubridate::as_date(album_release_date)) %>%
+  mutate_at(vars(key_name, mode_name, key_mode, album_type), factor)
+```
+
+Let's check if that worked out:
+```{r}
+df.german_rap_features_clean %>%
+  select(album_release_date, key_name, mode_name, key_mode, album_type) %>%
+  str()
+```
+
+Ok, data types look good now.
+
+## Missing values
+Finally, we should also check for missing values before entering the analysis. Let's get an overview by calculating the mean of NA's for each column:
+```{r}
+df.german_rap_features_clean %>%
+  is.na() %>%
+  colMeans() 
+```
+That looks perfect, no missing values. Ready for analysis.
+
+# Output 
+We can now write the preprocessed and cleaned dataframe to an .rds file which will be used for the analysis subsequently.
+
+```{r}
+write_rds(df.german_rap_features_clean, paste0("../data/german_rap_features_clean_", Sys.Date(), ".rds"))
+```
+
+
+
+

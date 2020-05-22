@@ -1,0 +1,422 @@
+---
+title: "Spotify analysis: Track duration of german rap music"
+subtitle: "Part 2: Analysis"
+author: "Luca Hüsler | Fabian Trottmann"
+date: "`r format(Sys.time(), '%d.%B %Y')`"
+output:
+  html_document:
+    theme: flatly
+    highlight: pygments
+    toc: true
+    toc_float: true
+    df_print: paged
+    number_sections: true
+# knit documents to output folder
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../output") })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, cache = TRUE)
+```
+
+
+# Introduction
+Streaming becomes more and more popular in the music industry. According to the [IFPI global music report 2019](https://www.ifpi.org/news/IFPI-GLOBAL-MUSIC-REPORT-2019), streaming accounts for almost half (47%) of the global revenue in the music industry in 2018. There were 255 million of paid streaming subscriptions at the end of 2018 (see figure 1).
+
+
+![**Figure 1:** Global revenue streams of music industry (Source: [IFPI](https://www.ifpi.org/)).](https://techcrunch.com/wp-content/uploads/2019/04/Screen-Shot-2019-04-02-at-2.07.26-PM.png?w=680) 
+
+We see that the income of music artists strongly depends on streaming platforms nowadays. It is therefore not surprising that (at least some) artists and labels try to optimize their music for streaming. Optimizing essentially means to create music that enters relevant playlists. Being promoted by a playlist can strongly boost the number of plays (check this interesting [article](https://mn2s.com/news/label-services/rising-importance-of-playlists-in-music-distribution/) about this topic).
+
+Somehow simulteanously to the rise of music streaming, we can observe that the duration of popular music tracks is getting shorter over the last few years. For example, the share of songs that are shorter than 2:30 minutes in the *Billboard Hot 100* charts increased remarkably in the last few years (see figure 2).
+
+![**Figure 2:** Share of songs shorter than 2:30 in Billboard Hot 100 (Source: [QUARTZ](https://qz.com/1519823/is-spotify-making-songs-shorter/)).](../data/picture_billboard.jpg)
+
+
+In this analysis, we want to have a closer look at this phenomena in german rap music. We will consider track durations of 50 popular german rap artists and see if we can observe a shortening of the durations over the last few years. We will also check if we can find some other variables in the data that have an influence on the duration of a track.
+
+The first part of the analysis will explore the data visually and aims to discover potential variables that have an influence on the track duration. In the second part of the analysis, we will fit and evaluate different parametric models. However, the aim of this work is to get familiar with the possibilities of R for designing a data science workflow. We will therefore keep the models rather simple.
+
+The analysis focuses on Spotify and considers tracks that have been released beween 2015-2019 (see *Part 1: Preprocessing* for details). 
+
+# Install and load packages
+By the following function, we can install and load the necessary packages for the analysis:
+```{r message=FALSE}
+usePackage <- function(p) 
+{
+  if (!is.element(p, installed.packages()[,1]))
+    install.packages(p, dep = TRUE, repos = "http://cran.us.r-project.org")
+  require(p, character.only = TRUE)
+}
+
+```
+
+Let's define the packages that we need and call the function. The function will install the package if necessary, otherwise just load it.
+```{r message=FALSE, warning=FALSE}
+packages <- c('tidyverse', 'plotly', 'ggthemes', 'GGally', 'mgcv', 'caret', 'sjPlot')
+
+sapply(packages, FUN=usePackage)
+  
+```
+
+# Load data
+We load the cleaned data first:
+```{r}
+df.german_rap_features_clean <- read_rds("../data/german_rap_features_clean_2020-02-29.rds")
+```
+
+
+# Exploring the data
+
+Let's have a look first at the artists with the most tracks released in the considered period:
+```{r}
+df.tracks_per_artist <- df.german_rap_features_clean %>%
+                          group_by(artist_name) %>%
+                          count(sort = TRUE) 
+
+head(df.tracks_per_artist)
+```
+
+So this guy won with 311 tracks released on Spotify in 5 years:
+
+![](https://i.scdn.co/image/ffe3d649ea69a254eb5b0f6ba0114448c6169afd)
+
+But that's strange: He has more than double of the tracks of the second artist. Let's have a closer look at his albums:
+```{r}
+df.german_rap_features_clean %>%
+  dplyr::filter(artist_name == "Kollegah") %>%
+  group_by(album_name) %>%
+  count(sort = TRUE)
+```
+Ok. Almost half of the tracks on one album. That [album](https://de.wikipedia.org/wiki/Das_ist_Alpha!) is actually more like an audio book with no music tracks on it, just spoken. We should do an extra cleaning step and filter that out.
+
+```{r}
+df.german_rap_features_clean <- df.german_rap_features_clean %>%
+  filter(album_name != "Das IST ALPHA! (Die 10 Boss-Gebote)")
+
+df.german_rap_features_clean %>%
+  group_by(artist_name) %>%
+  count(sort = TRUE)
+```
+He still has the most tracks, but much closer to the other artists now.
+
+## Median of track durations
+
+Let's start simple and explore how the median of the track durations evolved over the last five years. We create a function for that:
+```{r}
+boxplotArtist <- function(artist){
+  df.german_rap_features_clean %>%
+  filter(artist_name == artist) %>%
+  ggplot(data = df.german_rap_features_clean,
+                           mapping = aes(x = album_release_year, 
+                                         y = duration_min,
+                                         color = as.factor(album_release_year))) +
+                      geom_boxplot() +
+                      ggtitle(paste0("Boxplot of track durations per year of ", artist)) +
+                      xlab("Release Year") +
+                      ylab("Track duration [min]") +
+                      theme(legend.position="none") +
+                      scale_y_continuous(breaks=c(0:10))
+  
+}
+
+```
+
+
+Now, we can for example check the median of *Kollegah's* track durations over time:
+```{r}
+boxplotArtist("Kollegah")
+```
+
+We see that the median remains quite stable from 2015-2017, but then decreases.
+
+What about the artist with the second most tracks, *Ufo361*?
+```{r}
+boxplotArtist("Ufo361")
+```
+
+This gives quite a similar picture as for *Kollegah*. Is this a pattern that we can observe when we look at all the tracks released between 2015-2019? Let's see:
+
+```{r}
+boxplot_album_year <-   ggplot(data = df.german_rap_features_clean,
+                           mapping = aes(x = album_release_year, 
+                                         y = duration_min,
+                                         color = as.factor(album_release_year))) +
+                          geom_boxplot() +
+                          ggtitle("Boxplot of track durations per year (all artists)") +
+                          xlab("Release Year") +
+                          ylab("Track duration [min]") +
+                          theme(legend.position="none") +
+                          scale_y_continuous(breaks=c(0:10))
+
+boxplot_album_year
+
+```
+
+This is obviously also true when looking at all the 50 artists. We see a quite stable median track duration of about 3:30 min from 2015-2017, but then decreasing to about 3:00 min in 2019. This is quite a strong decrease!
+
+Although it is better to consider the median for our purpose, we can also have a look at the mean of the track durations.
+
+```{r}
+df.german_rap_features_clean %>%
+  group_by(album_release_year) %>%
+  summarize(mean = round(mean(duration_min),2),
+            median = round(median(duration_min),2)) 
+  
+```
+
+So we see that both, the median and the mean are decreasing from 2017-2019. Especially, there is a substanial drop in both - mean and median - from 2018 to 2019.
+
+
+## Scatterplot track duration and release date
+
+Instead of taking the year of realease, we can have a look at the exact release date.
+
+```{r}
+ggplot(df.german_rap_features_clean, mapping = aes(x= album_release_date, y = duration_min)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  ggtitle("Scatterplot of track duration and release date") +
+                          xlab("Release date") +
+                          ylab("Track duration [min]") 
+```
+
+This confirms the decrease in the track duration over time.
+
+## Track popularity
+
+Let's check if the popularity of a track could have some influence on its duration:
+
+```{r}
+
+ggplot(df.german_rap_features_clean, mapping = aes(x= track_popularity, y = duration_min)) +
+  geom_point() +
+  geom_smooth()
+
+```
+
+That doesn't look like a clear pattern.
+
+## Audio features
+Spotify calculates some indicators for each track. For example, the feature `valence` is a metric for the positivity of a track (see the [Spotify API](https://developer.spotify.com/documentation/web-api/reference/tracks/get-audio-features/) for a detailed description). 
+
+Let's have a look at the density distribution of the audio features in our data. 
+
+```{r message=FALSE}
+feature_names <- names(df.german_rap_features_clean)[8:18]
+
+df.german_rap_features_clean %>%
+  select(c(artist_name, all_of(feature_names))) %>%
+  pivot_longer(cols = feature_names) %>%
+  ggplot(aes(x = value)) +
+  theme(axis.ticks.y = element_blank()) +
+  geom_density() +
+  facet_wrap(~name, ncol = 2, scales = "free") +
+  labs(title = 'Densitiy distributions of audio features',
+       x = '', y = 'density')
+```
+
+Is there a relationship between these audio features and the duration of track? For example, do positive tracks (high `valence`) tend to be shorter? We can create a correlation matrix to get an overview. We use the `ggcorr()` function from the {GGally} package to do that.
+
+```{r}
+cor_matrix_features <- df.german_rap_features_clean %>%
+  select(c(duration_min, feature_names)) %>%
+  cor() %>%
+  as_tibble()
+
+# see https://briatte.github.io/ggcorr/ for visual adjustments of ggcorr()
+cor_matrix_features %>%
+  arrange(duration_min) %>%
+  ggcorr(geom = "tile", hjust = 0.85, size= 4, layout.exp = 2, 
+         label_alpha=T, name = "Correlation", label = TRUE) +
+  ggtitle("Correlation matrix of track duration and audio features")
+```
+
+There seems to be some correlation among some of the audio features. But there is no strong correlation between them and the track duration.
+
+## Checking the influence of categorical variables
+We have some categorical variables in the data that may also have an influence on track duration - such as  `key_name`, `mode_name`, `key_mode` or `album_type`. Let's now check if we can observe some relationships here.
+
+
+```{r}
+plotCategorical <- function(x){
+  df.german_rap_features_clean %>%
+    ggplot(mapping = aes(x=x, y=duration_min)) +
+    geom_boxplot()
+}
+
+```
+
+
+```{r}
+plotCategorical(df.german_rap_features_clean$album_type) +
+  labs(x = "Album type", y = "Track duration [min]")
+```
+
+There doesn't seem to be a big difference in track duration between single and album tracks.
+
+
+Let's see if we can find something interesting about the key (Tonlage) of the tracks. 
+
+```{r}
+plotCategorical(reorder(df.german_rap_features_clean$key_name, 
+                        df.german_rap_features_clean$duration_min, FUN = median)) +
+  labs(x = "Key mode", y = "Track duration [min]")
+```
+
+```{r}
+df.german_rap_features_clean %>%
+  select(duration_min, key_name) %>%
+  group_by(key_name) %>%
+  summarise(mean_duration = mean(duration_min)) %>%
+  dplyr::arrange(mean_duration)
+```
+
+That looks interesting. It seems that tracks that are written in sharp keys (with `#`) tend to be shorter. We could create a new variable out of that which distinguishes between sharp and flat keys (see [Wikipedia](https://en.wikipedia.org/wiki/Key_(music))).
+
+```{r}
+df.german_rap_features_clean <- df.german_rap_features_clean %>%
+  dplyr::mutate(sharp = as_factor(case_when(str_detect(key_name, '#') ~ "sharp",
+                                       TRUE ~ "flat")))
+
+```
+
+
+
+# Model fitting
+In our use case, we want to find out about explaining variables of the track durations - we are in an inference setting. Hence, we will focus on parametric models that allow us to interprete the results.
+
+## Simple linear model
+As our starting point was to inspect the relationship between track duration and release date, we start with a simple linear model based on the formula:
+
+$$track\_duration = \beta_0 + \beta_1*release\_date$$
+We use `tab_model()` of the {sjPlot} package to create a summary output that looks a bit nicer for html than the ordinary `summary()` call.
+
+```{r}
+fit.lm <- lm(duration_min ~ album_release_date, data = df.german_rap_features_clean)
+
+tab_model(fit.lm, digits = 4)
+```
+We get a low p-value, so there is strong evidence that the release date has an influence on the track duration. According to the model, $\beta_1$ equals -0.00029. So increasing the release date by 1, the song duration decreases by -0.00023 minutes. So in 365 days, the track duration would decrease about 10 seconds. However, the $R^2$ is very low and accordingly, the release date only explains a small part of the variance in track durations.
+
+## Multiple linear model
+Unfortunately, we could not detect many other variables in the data that seem to have a strong influence the track duration. However, let's try to add the newly created variable `sharp`. We extend the formula as follows:
+
+$$track\_duration = \beta_0 + \beta_1*release\_date + \beta_2*sharp$$
+
+```{r}
+fit.lm.2 <- update(fit.lm, . ~ . + sharp)
+```
+
+Let's see the summary and compare it to the previous model:
+```{r}
+tab_model(fit.lm, fit.lm.2, digits = 4, dv.labels = c("Simple LM", "Multiple LM"))
+```
+
+We see that we also get a low p-value for `sharp`, indicating that the key mode has an influence on the track duration. However, the $R^2$ just increased slightly. The model tells us that track duration increases about 10 seconds if written in flat keys.
+
+## Polynomial model
+Let's see if we can improve the model when adding a polynomial term (quadratic) for the release date. 
+
+```{r}
+fit.poly <- lm(duration_min ~ poly(album_release_date, 2) + sharp, data = df.german_rap_features_clean)
+tab_model(fit.poly, digits = 4, dv.labels = "Polynomial (degree = 2)")
+```
+
+We get low p-values for both degrees. The $R^2$ is slightly higher than before. 
+
+
+# Model assessment
+So far, we did "in sample" modelling, meaning that we used all the data for fitting. We will now apply 10-fold cross validation to compare the models and see how they perfom when a part of the data is left aside. We use the `train()` function from the {caret} package to do that.
+
+```{r}
+# Define training control
+set.seed(8) 
+train.control <- trainControl(method = "cv", number = 10)
+
+# Simple linear model 
+cv.fit.lm <- train(duration_min ~ album_release_date, 
+                   data = df.german_rap_features_clean, method='lm', trControl = train.control)
+
+# Multiple linear model
+cv.fit.lm.2 <- train(duration_min ~ album_release_date + sharp, 
+                     data = df.german_rap_features_clean, method='lm', trControl = train.control)
+
+# Polynomial model
+cv.fit.poly <- train(duration_min ~ poly(album_release_date, 2) + sharp, 
+                    data = df.german_rap_features_clean, method='lm', trControl = train.control)
+```
+
+
+Now we can compare the models with the `dotplot()` function of the {caret} package, e.g. by comparing $R^2$ or the RMSE. 
+
+```{r}
+resamps <- resamples(list(simple_lm = cv.fit.lm,
+                          multiple_lm = cv.fit.lm.2,
+                          poly_lm = cv.fit.poly))
+
+dotplot(resamps, metric = c("Rsquared"), main = "Comparison of R Squared")
+```
+
+```{r}
+dotplot(resamps, metric = c("RMSE"), main = "Comparison of RMSE")
+```
+
+We see that $R^2$ is also slightly higher for the polynomial model when applying cross validation. However, we also see that the RMSE is pretty much the same for all the models. 
+
+
+# Creating intercative charts
+In this chapter, we want to explore the possibilities of creating interactive charts in R. In our opinion, data visualization becomes more and more important in terms of communcation. Interactive charts offer nice possibilities to present the data but also for "playing around" visually before fitting a model.
+
+There are several packages that allow to create interactive plots in R (see e.g. [highcharter](http://jkunst.com/highcharter/)). However, we will focus on the {plotly} package here.
+
+One of the best things about plotly is the nice interaction with ggplot. A ggplot object can be passed directly via the `ggplotly()` function. Let's try this. We use the earlier created boxplot of track durations per year:
+```{r}
+ggplotly(boxplot_album_year)
+```
+
+Now let's create a new chart. We  create a scatterplot of all the tracks with {ggplot}. We specify the `text=` argument to define how the tooltip of the interactive chart should look like.
+
+```{r}
+gg.scatter <- df.german_rap_features_clean %>% 
+  ggplot(aes(album_release_date, duration_min, 
+             text=sprintf("Artist: %s<br>Track: %s<br>Duration: %s", artist_name, track_name, round(duration_min,1)), 
+             color = artist_name)) + 
+  geom_point() +
+  labs(y="Track duration [min]", x = "Release date", title = "Interactive scatterplot") +
+  theme(legend.position="none")
+
+```
+
+Now, let's pass it to the `ggplotly()` function:
+```{r}
+ggplotly(gg.scatter, tooltip = "text")
+```
+This offers a really nice way to explore the data. For example, suspicious observations can directly be identified from the plot. Also zooming in and out is very useful.
+
+Let's get a bit more fancy and create an animated chart. We saw that the variable `valence` is a indcator for the positivity of a track (high valence means more positive). So let's see for some artists how the mean valence evolved over the 5 years.
+
+```{r}
+df.valence.mean <- df.german_rap_features_clean %>%
+  group_by(album_release_year, artist_name) %>%
+  dplyr::filter(artist_name %in% c("Sido","Bushido", "Kollegah", "Kontra K")) %>%
+  summarize(mean_valence = mean(valence))
+
+gg.valence <- ggplot(df.valence.mean, aes(y=mean_valence, x=album_release_year, color=artist_name)) +
+  geom_point(aes(frame = album_release_year)) +
+  labs(y="Mean valence", x = "Release year", title = "Fancy animated plot", colour = "Artist") 
+  
+
+ggplotly(gg.valence) %>%
+  animation_slider(
+    currentvalue = list(prefix = "Year: ", font = list(color="#084B8A"))
+  )
+```
+
+Sido started off really happy in 2015 and then became sad.
+
+
+We see that {plotly} combined with {ggplot2} offers a really great toolset for data visualization. Check the [documentation](https://plot.ly/r/) for more examples.
+
+
